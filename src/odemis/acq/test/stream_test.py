@@ -40,6 +40,10 @@ import unittest
 from unittest.case import skip
 import weakref
 from odemis.acq.stream import POL_POSITIONS
+from numpy import int16
+from odemis.acq.stream._projection import RGBSpatialSpectrumProjection, \
+    SinglePointSpectrumProjection, SinglePointChronoProjection, \
+    LineSpectrumProjection
 
 logging.basicConfig(format="%(asctime)s  %(levelname)-7s %(module)-15s: %(message)s")
 logging.getLogger().setLevel(logging.DEBUG)
@@ -3130,10 +3134,11 @@ class StaticStreamsTestCase(unittest.TestCase):
         acd = tiff.open_data(FILENAME)
 
         specs = stream.StaticSpectrumStream("test", acd.content[0])
+        proj_spatial = RGBSpatialSpectrumProjection(specs)
         time.sleep(0.5)  # wait a bit for the image to update
 
         # Control spatial spectrum
-        im2d = specs.image.value
+        im2d = proj_spatial.image.value
         # Check it's a RGB DataArray
         self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
         # Check it's at the right position
@@ -3144,10 +3149,11 @@ class StaticStreamsTestCase(unittest.TestCase):
         """Test StaticSpectrumStream 2D"""
         spec = self._create_spec_data()
         specs = stream.StaticSpectrumStream("test", spec)
+        proj_spatial = RGBSpatialSpectrumProjection(specs)
         time.sleep(0.5)  # wait a bit for the image to update
 
         # Control spatial spectrum
-        im2d = specs.image.value
+        im2d = proj_spatial.image.value
         # Check it's a RGB DataArray
         self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
         # Check it's at the right position
@@ -3157,24 +3163,28 @@ class StaticStreamsTestCase(unittest.TestCase):
         # change bandwidth to max
         specs.spectrumBandwidth.value = (specs.spectrumBandwidth.range[0][0],
                                          specs.spectrumBandwidth.range[1][1])
-        im2d = specs.image.value
+        time.sleep(0.5)  # wait a bit for the image to update
+        im2d = proj_spatial.image.value
         self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
 
         # Check RGB spatial projection
         time.sleep(0.2)
         specs.fitToRGB.value = True
-        im2d = specs.image.value
+        time.sleep(0.5)  # wait a bit for the image to update
+        im2d = proj_spatial.image.value
         self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
 
     def test_spec_0d(self):
         """Test StaticSpectrumStream 0D"""
         spec = self._create_spec_data()
         specs = stream.StaticSpectrumStream("test", spec)
+        proj_point_spectrum = SinglePointSpectrumProjection(specs)
         time.sleep(0.5)  # wait a bit for the image to update
 
         # Check 0D spectrum
         specs.selected_pixel.value = (1, 1)
-        sp0d = specs.get_pixel_spectrum()
+        time.sleep(0.5)  # wait a bit for the image to update
+        sp0d = proj_point_spectrum.image.value
         wl0d, _ = specs.get_spectrum_range()
         self.assertEqual(sp0d.shape, (spec.shape[0],))
         self.assertEqual(wl0d.shape, (spec.shape[0],))
@@ -3183,7 +3193,8 @@ class StaticStreamsTestCase(unittest.TestCase):
 
         # Check width > 1 (on the border)
         specs.selectionWidth.value = 12
-        sp0d = specs.get_pixel_spectrum()
+        time.sleep(0.5)  # wait a bit for the image to update
+        sp0d = proj_point_spectrum.image.value
         wl0d, _ = specs.get_spectrum_range()
         self.assertEqual(sp0d.shape, (spec.shape[0],))
         self.assertEqual(wl0d.shape, (spec.shape[0],))
@@ -3193,7 +3204,8 @@ class StaticStreamsTestCase(unittest.TestCase):
         # Check with very large width
         specs.selectionWidth.value = specs.selectionWidth.range[1]
         specs.selected_pixel.value = (55, 106)
-        sp0d = specs.get_pixel_spectrum()
+        time.sleep(0.5)  # wait a bit for the image to update
+        sp0d = proj_point_spectrum.image.value
         wl0d, _ = specs.get_spectrum_range()
         self.assertEqual(sp0d.shape, (spec.shape[0],))
         self.assertEqual(wl0d.shape, (spec.shape[0],))
@@ -3204,10 +3216,12 @@ class StaticStreamsTestCase(unittest.TestCase):
         """Test StaticSpectrumStream 1D"""
         spec = self._create_spec_data()
         specs = stream.StaticSpectrumStream("test", spec)
+        proj_line_spectrum = LineSpectrumProjection(specs)
 
         # Check 1d spectrum on corner-case: parallel to the X axis
         specs.selected_line.value = [(3, 7), (3, 65)]
-        sp1d = specs.get_line_spectrum()
+        time.sleep(0.5)  # ensure that .image is updated
+        sp1d = proj_line_spectrum.image.value
         wl1d, _ = specs.get_spectrum_range()
         self.assertEqual(sp1d.ndim, 3)
         self.assertEqual(sp1d.shape, (65 - 7 + 1, spec.shape[0], 3))
@@ -3230,7 +3244,8 @@ class StaticStreamsTestCase(unittest.TestCase):
 
         # Check 1d spectrum in diagonal
         specs.selected_line.value = [(30, 65), (1, 1)]
-        sp1d = specs.get_line_spectrum()
+        time.sleep(0.5)  # ensure that .image is updated
+        sp1d = proj_line_spectrum.image.value
         wl1d, _ = specs.get_spectrum_range()
         self.assertEqual(sp1d.ndim, 3)
         # There is not too much expectations on the size of the spatial axis
@@ -3246,7 +3261,8 @@ class StaticStreamsTestCase(unittest.TestCase):
         # Check 1d with larger width
         specs.selected_line.value = [(30, 65), (5, 1)]
         specs.selectionWidth.value = 12
-        sp1d = specs.get_line_spectrum()
+        time.sleep(0.5)  # ensure that .image is updated
+        sp1d = proj_line_spectrum.image.value
         wl1d, _ = specs.get_spectrum_range()
         self.assertEqual(sp1d.ndim, 3)
         # There is not too much expectations on the size of the spatial axis
@@ -3258,7 +3274,8 @@ class StaticStreamsTestCase(unittest.TestCase):
 
         specs.selected_line.value = [(30, 65), (5, 12)]
         specs.selectionWidth.value = 13 # brings bad luck?
-        sp1d = specs.get_line_spectrum()
+        time.sleep(0.5)  # ensure that .image is updated
+        sp1d = proj_line_spectrum.image.value
         wl1d, _ = specs.get_spectrum_range()
         self.assertEqual(sp1d.ndim, 3)
         # There is not too much expectations on the size of the spatial axis
@@ -3272,11 +3289,113 @@ class StaticStreamsTestCase(unittest.TestCase):
         """Test StaticSpectrumStream calibration"""
         spec = self._create_spec_data()
         specs = stream.StaticSpectrumStream("test", spec)
+        proj_spatial = RGBSpatialSpectrumProjection(specs)
         specs.spectrumBandwidth.value = (specs.spectrumBandwidth.range[0][0], specs.spectrumBandwidth.range[1][1])
         time.sleep(0.5)  # ensure that .image is updated
 
         # Check efficiency compensation
-        prev_im2d = specs.image.value
+        prev_im2d = proj_spatial.image.value
+
+        dbckg = numpy.ones(spec.shape, dtype=numpy.uint16) + 10
+        wl_bckg = list(spec.metadata[model.MD_WL_LIST])
+        obckg = model.DataArray(dbckg, metadata={model.MD_WL_LIST: wl_bckg})
+        bckg = calibration.get_spectrum_data([obckg])
+
+        dcalib = numpy.array([1, 1.3, 2, 3.5, 4, 5, 1.3, 6, 9.1], dtype=numpy.float)
+        dcalib.shape = (dcalib.shape[0], 1, 1, 1, 1)
+        wl_calib = 400e-9 + numpy.array(range(dcalib.shape[0])) * 10e-9
+        calib = model.DataArray(dcalib, metadata={model.MD_WL_LIST: wl_calib})
+
+        specs.efficiencyCompensation.value = calib
+
+        specs.background.value = bckg
+
+        time.sleep(0.5)
+
+        # Control spatial spectrum
+        im2d = proj_spatial.image.value
+        # Check it's a RGB DataArray
+        self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
+        self.assertTrue(numpy.any(im2d != prev_im2d))
+
+    def _create_temporal_spec_data(self):
+        # Temporal Spectrum
+        data = numpy.random.randint(1, 100, size=(251, 100, 1, 200, 300), dtype="uint16")
+        # data[:, 0, 0, :, 3] = numpy.random.randint(0, 2 ** 12 - 1, (200,))
+        wld = 433e-9 + numpy.array(range(data.shape[0])) * 0.1e-9
+        tld = numpy.array(range(data.shape[1])) * 0.1e-9
+        md = {model.MD_SW_VERSION: "1.0-test",
+             model.MD_HW_NAME: "fake ccd",
+             model.MD_DESCRIPTION: "Spectrum",
+             model.MD_ACQ_DATE: time.time(),
+             model.MD_BPP: 12,
+             model.MD_PIXEL_SIZE: (2e-5, 2e-5),  # m/px
+             model.MD_POS: (1.2e-3, -30e-3),  # m
+             model.MD_EXP_TIME: 0.2,  # s
+             model.MD_LENS_MAG: 60,  # ratio
+             model.MD_WL_LIST: wld,
+             model.MD_TIME_LIST: tld,
+            }
+        return model.DataArray(data, md)
+
+    def test_temp_spec(self):
+        """Test Temporal SpectrumStream and Projections"""
+        spec = self._create_temporal_spec_data()
+        specs = stream.StaticSpectrumStream("test", spec)
+        time.sleep(1.0)  # wait a bit for the image to update
+
+        # Control spatial spectrum
+        proj_spatial = RGBSpatialSpectrumProjection(specs)
+        time.sleep(0.5)
+        im2d = proj_spatial.image.value
+        # Check it's a RGB DataArray
+        self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
+        # Check it's at the right position
+        md2d = im2d.metadata
+        self.assertEqual(md2d[model.MD_POS], spec.metadata[model.MD_POS])
+
+        # change bandwidth to max
+        specs.spectrumBandwidth.value = (specs.spectrumBandwidth.range[0][0],
+                                         specs.spectrumBandwidth.range[1][1])
+        time.sleep(0.2)
+        im2d = proj_spatial.image.value
+        self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
+
+        # Check RGB spatial projection
+        specs.fitToRGB.value = True
+        time.sleep(0.2)
+        im2d = proj_spatial.image.value
+        self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
+
+        # Create projections
+        proj_point_spectrum = SinglePointSpectrumProjection(specs)
+        proj_point_chrono = SinglePointChronoProjection(specs)
+
+        # Test
+        tl = spec.metadata.get(model.MD_TIME_LIST)
+        wl = spec.metadata.get(model.MD_WL_LIST)
+
+        for time_index in range(0, 3):
+            for wl_index in range(0, 3):
+                for x in range(100, 10):
+                    for y in range(100, 10):
+                        specs.selected_pixel.value = (x, y)
+                        specs.selected_time.value = tl[time_index]
+                        specs.selected_wavelength.value = wl[wl_index]
+                        time.sleep(0.2)
+                        self.assertListEqual(proj_point_spectrum.image.value.tolist(), spec[:, :, 0, y, x].tolist())
+                        self.assertListEqual(proj_point_chrono.image.value.tolist(), spec[wl_index, :, 0, y, x].tolist())
+
+    def test_temp_spec_calib(self):
+        """Test StaticSpectrumStream calibration"""
+        spec = self._create_spec_data()
+        specs = stream.StaticSpectrumStream("test", spec)
+        proj_spatial = RGBSpatialSpectrumProjection(specs)
+        specs.spectrumBandwidth.value = (specs.spectrumBandwidth.range[0][0], specs.spectrumBandwidth.range[1][1])
+        time.sleep(0.5)  # ensure that .image is updated
+
+        # Check efficiency compensation
+        prev_im2d = proj_spatial.image.value
 
         dbckg = numpy.ones(spec.shape, dtype=numpy.uint16) + 10
         wl_bckg = list(spec.metadata[model.MD_WL_LIST])
@@ -3293,7 +3412,8 @@ class StaticStreamsTestCase(unittest.TestCase):
         specs.background.value = bckg
 
         # Control spatial spectrum
-        im2d = specs.image.value
+        time.sleep(0.5)
+        im2d = proj_spatial.image.value
         # Check it's a RGB DataArray
         self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
         self.assertTrue(numpy.any(im2d != prev_im2d))

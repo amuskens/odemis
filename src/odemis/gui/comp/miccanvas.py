@@ -1268,12 +1268,18 @@ class TwoDPlotCanvas(BitmapCanvas):
         self.view = view
         self._tab_data_model = tab_data
 
-    def set_2d_data(self, im_data, unit_x=None, unit_y=None, range_x=None, range_y=None):
+    def set_2d_data(self, im_data, unit_x=None, unit_y=None, range_x=None, range_y=None, xflip=False, yflip=False):
         """ Set the data to be displayed
 
         TODO: Allow for both a horizontal and vertical domain
         """
-        self.set_images([(im_data, (0.0, 0.0), 1.0, True, None, None, None, None, "Spatial Spectrum")])
+        flip = 0
+        if xflip:
+            flip = wx.HORIZONTAL
+        if yflip:
+            flip = wx.VERTICAL
+
+        self.set_images([(im_data, (0.0, 0.0), 1.0, True, None, None, flip, None, "Spatial Spectrum")])
         self.unit_x = unit_x
         self.unit_y = unit_y
         self.range_x = range_x
