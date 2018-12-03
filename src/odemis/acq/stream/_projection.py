@@ -552,8 +552,12 @@ class MeanSpectrumProjection(DataProjection):
 
         raw_md = self.stream.calibrated.value.metadata
         md = {}
-        md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]
-        md[model.MD_WL_POLYNOMIAL] = raw_md.get(model.MD_WL_LIST, None)
+        if model.MD_WL_LIST in raw_md:
+            md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]
+        elif model.MD_WL_POLYNOMIAL in raw_md:
+            md[model.MD_WL_POLYNOMIAL] = raw_md[model.MD_WL_POLYNOMIAL]
+        else:
+            raise ValueError("No wavelength data found in spectrum data.")
 
         self.image.value = model.DataArray(av_data, md)
 
@@ -644,8 +648,13 @@ class SinglePointSpectrumProjection(DataProjection):
                 mean = datasum / n
                 raw_md = self.stream.calibrated.value.metadata
                 md = {}
-                md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]
-                md[model.MD_WL_POLYNOMIAL] = raw_md.get(model.MD_WL_LIST, None)
+                if model.MD_WL_LIST in raw_md:
+                    md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]
+                elif model.MD_WL_POLYNOMIAL in raw_md:
+                    md[model.MD_WL_POLYNOMIAL] = raw_md[model.MD_WL_POLYNOMIAL]
+                else:
+                    raise ValueError("No wavelength data found in spectrum data.")
+
                 raw = model.DataArray(mean.astype(spec2d.dtype))
 
                 self.image.value = raw
@@ -875,7 +884,12 @@ class LineSpectrumProjection(RGBProjection):
             raw_md = self.stream.calibrated.value.metadata
             md = {}
             md[model.MD_DIMS] = "YXC"  # RGB format
-            md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]
+            if model.MD_WL_LIST in raw_md:
+                md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]
+            elif model.MD_WL_POLYNOMIAL in raw_md:
+                md[model.MD_WL_POLYNOMIAL] = raw_md[model.MD_WL_POLYNOMIAL]
+            else:
+                raise ValueError("No wavelength data found in spectrum data.")
 
             md[MD_PIXEL_SIZE] = (None, pxs)  # for the spectrum, use get_spectrum_range()
 
@@ -968,7 +982,12 @@ class TemporalSpectrumProjection(RGBProjection):
             # md = self.stream._find_metadata(self.stream.calibrated.value.metadata)
             md = {}
             md[model.MD_DIMS] = "YXC"  # RGB format
-            md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]
+            if model.MD_WL_LIST in raw_md:
+                md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]
+            elif model.MD_WL_POLYNOMIAL in raw_md:
+                md[model.MD_WL_POLYNOMIAL] = raw_md[model.MD_WL_POLYNOMIAL]
+            else:
+                raise ValueError("No wavelength data found in spectrum data.")
             md[model.MD_TIME_LIST] = raw_md.get(model.MD_TIME_LIST, None)
             # We treat width as the diameter of the circle which contains the center
             # of the pixels to be taken into account
