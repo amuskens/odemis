@@ -45,6 +45,7 @@ class DataProjection(object):
         stream (Stream): the Stream to project
         '''
         self.stream = stream
+        self.name = stream.name
         self. acquisitionType = stream.acquisitionType
         self._im_needs_recompute = threading.Event()
         weak = weakref.ref(self)
@@ -556,6 +557,8 @@ class MeanSpectrumProjection(DataProjection):
 
         self.image.value = model.DataArray(av_data, md)
 
+        return
+
 
 class SinglePointSpectrumProjection(DataProjection):
     """
@@ -695,7 +698,8 @@ class SinglePointChronoProjection(DataProjection):
         """ Recomputes the image with all the raw data available
         """
         # logging.debug("Updating image")
-        if self.selected_pixel.value == (None, None):
+        raw_md = self.stream.calibrated.value.metadata
+        if self.selected_pixel.value == (None, None) or not model.MD_TIME_LIST in raw_md:
             return
 
         try:
@@ -731,7 +735,6 @@ class SinglePointChronoProjection(DataProjection):
                             datasum += chrono2d[:, py, px]
 
                 mean = datasum / n
-                raw_md = self.stream.calibrated.value.metadata
                 md = {}
                 md[model.MD_TIME_LIST] = raw_md.get(model.MD_TIME_LIST, None)
                 raw = model.DataArray(mean.astype(chrono2d.dtype), md)
@@ -951,7 +954,10 @@ class TemporalSpectrumProjection(RGBProjection):
         """
         returns a the temporal spectrum image for the given .selected_pixel
         """
-        if self.selected_pixel.value == (None, None):
+
+        raw_md = self.stream.calibrated.value.metadata
+
+        if self.selected_pixel.value == (None, None) or not model.MD_TIME_LIST in raw_md:
             return None
 
         try:
@@ -960,7 +966,6 @@ class TemporalSpectrumProjection(RGBProjection):
             spec2d = self.calibrated.value[:, :, 0, :, :]  # same data but remove useless dims
 
             # md = self.stream._find_metadata(self.stream.calibrated.value.metadata)
-            raw_md = self.stream.calibrated.value.metadata
             md = {}
             md[model.MD_DIMS] = "YXC"  # RGB format
             md[model.MD_WL_LIST] = raw_md[model.MD_WL_LIST]

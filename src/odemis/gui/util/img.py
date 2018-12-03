@@ -37,8 +37,10 @@ import time
 import wx
 
 import odemis.acq.stream as acqstream
+from odemis.util import spectrum
 import odemis.gui.img as guiimg
-
+from odemis.acq.stream._projection import RGBSpatialSpectrumProjection, \
+    SinglePointChronoProjection
 
 BAR_PLOT_COLOUR = (0.5, 0.5, 0.5)
 CROP_RES_LIMIT = 1024
@@ -1132,7 +1134,7 @@ def bar_plot(ctx, data, data_width, range_x, data_height, range_y, client_size, 
     ctx.fill()
 
 
-def spectrum_to_export_data(stream, raw):
+def spectrum_to_export_data(proj, raw):
     """
     Creates either raw or WYSIWYG representation for the spectrum data plot
 
@@ -1141,19 +1143,19 @@ def spectrum_to_export_data(stream, raw):
 
     returns (model.DataArray)
     """
-    spectrum = stream.get_pixel_spectrum()
-    if spectrum is None:
+    spec = proj.image.value
+    if spec is None:
         raise LookupError("No pixel selected to pick a spectrum")
-    spectrum_range, unit = stream.get_spectrum_range()
+    spectrum_range, unit = spectrum.get_spectrum_range(spec)
 
     if raw:
         if unit == "m":
-            spectrum.metadata[model.MD_WL_LIST] = spectrum_range
-        spectrum.metadata[model.MD_ACQ_TYPE] = model.MD_AT_SPECTRUM
-        return spectrum
+            spec.metadata[model.MD_WL_LIST] = spectrum_range
+        spec.metadata[model.MD_ACQ_TYPE] = model.MD_AT_SPECTRUM
+        return spec
     else:
         # Draw spectrum bar plot
-        data = zip(spectrum_range, spectrum)
+        data = zip(spectrum_range, spec)
         fill_colour = BAR_PLOT_COLOUR
         client_size = wx.Size(SPEC_PLOT_SIZE, SPEC_PLOT_SIZE)
         data_to_draw = numpy.empty((client_size.y, client_size.x, 4), dtype=numpy.uint8)
@@ -1180,7 +1182,7 @@ def spectrum_to_export_data(stream, raw):
         fill_colour = (0, 0, 0)
 
         # Draw bottom horizontal scale legend
-        value_range = (spectrum_range[0], spectrum_range[-1])
+        value_range = (spec[0], spec[-1])
         orientation = wx.HORIZONTAL
         tick_spacing = SPEC_PLOT_SIZE // 4
         font_size = SPEC_PLOT_SIZE * SPEC_FONT_SIZE
@@ -1206,7 +1208,7 @@ def spectrum_to_export_data(stream, raw):
         # Draw left vertical scale legend
         orientation = wx.VERTICAL
         tick_spacing = SPEC_PLOT_SIZE // 6
-        value_range = (min(spectrum), max(spectrum))
+        value_range = (min(spec), max(spec))
         scale_y_draw = numpy.empty((client_size.y, SPEC_SCALE_WIDTH, 4), dtype=numpy.uint8)
         scale_y_draw.fill(255)
         surface = cairo.ImageSurface.create_for_data(
@@ -1243,7 +1245,7 @@ def spectrum_to_export_data(stream, raw):
         return spec_plot
 
 
-def time_spectrum_to_export_data(stream, raw):
+def time_spectrum_to_export_data(proj, raw):
     """
     Creates either raw or WYSIWYG representation for the time spectrum data plot
 
@@ -1252,19 +1254,22 @@ def time_spectrum_to_export_data(stream, raw):
 
     returns (model.DataArray)
     """
-    spectrum = stream.get_pixel_time()
-    if spectrum is None:
+    if not isinstance(proj, SinglePointChronoProjection):
+        raise ValueError("Trying to export a time spectrum of an invalid projection")
+
+    spec = proj.image.value
+    if spec is None:
         raise LookupError("No pixel selected to pick a spectrum")
-    time_range, unit = stream.get_time_values()
+    time_range, unit = spectrum.get_time_range(spec)
 
     if raw:
         if unit == "s":
-            spectrum.metadata[model.MD_TIME_LIST] = time_range
-        spectrum.metadata[model.MD_ACQ_TYPE] = model.MD_AT_SPECTRUM
-        return spectrum
+            spec.metadata[model.MD_TIME_LIST] = time_range
+        spec.metadata[model.MD_ACQ_TYPE] = model.MD_AT_SPECTRUM
+        return spec
     else:
         # Draw spectrum bar plot
-        data = zip(time_range, spectrum)
+        data = zip(time_range, spec)
         fill_colour = BAR_PLOT_COLOUR
         client_size = wx.Size(SPEC_PLOT_SIZE, SPEC_PLOT_SIZE)
         data_to_draw = numpy.empty((client_size.y, client_size.x, 4), dtype=numpy.uint8)
@@ -1354,7 +1359,7 @@ def time_spectrum_to_export_data(stream, raw):
         return spec_plot
 
 
-def line_to_export_data(stream, raw):
+def line_to_export_data(proj, raw):
     """
     Creates either raw or WYSIWYG representation for the spectrum line data
 
@@ -1363,13 +1368,15 @@ def line_to_export_data(stream, raw):
 
     returns (model.DataArray)
     """
-    spectrum = stream.get_line_spectrum(raw)
-    if spectrum is None:
+
+    # Set the
+    spec = proj.image.value
+    if spec is None:
         raise LookupError("No line selected to pick a spectrum")
-    spectrum_range, unit = stream.get_spectrum_range()
+    spectrum_range, unit = spectrum.get_spectrum_range(spec)
 
     if raw:
-        data = spectrum.T  # switch axes
+        data = spec.T  # switch axes
         if unit == "m":
             data.metadata[model.MD_WL_LIST] = spectrum_range
         data.metadata[model.MD_ACQ_TYPE] = model.MD_AT_SPECTRUM
@@ -1436,7 +1443,7 @@ def line_to_export_data(stream, raw):
         # Draw left vertical (distance) legend
         orientation = wx.VERTICAL
         tick_spacing = SPEC_PLOT_SIZE // 6
-        line_length = spectrum.shape[0] * spectrum.metadata[model.MD_PIXEL_SIZE][1]
+        line_length = spec.shape[0] * spec.metadata[model.MD_PIXEL_SIZE][1]
         value_range = (0, line_length)
         scale_y_draw = numpy.empty((client_size.y, SPEC_SCALE_WIDTH, 4), dtype=numpy.uint8)
         scale_y_draw.fill(255)
@@ -1475,29 +1482,32 @@ def line_to_export_data(stream, raw):
         return line_img
 
 
-def temporal_spectrum_to_export_data(stream, raw):
+def temporal_spectrum_to_export_data(proj, raw):
     """
     Creates either raw or WYSIWYG representation for the temporal spectrum data
 
-    stream (SpectrumStream)
+    proj (RGBSpatialSpectrumProjection)
     raw (boolean): if True returns raw representation
 
     returns (model.DataArray)
     """
 
-    spectrum = stream.get_pixel_time_spectrum()
+    if not isinstance(proj, RGBSpatialSpectrumProjection):
+        return
 
-    md = spectrum.metadata
-    spectrum = numpy.swapaxes(spectrum, 0, 1)  # Make sure the order is T vs C
-    spectrum = model.DataArray(img.DataArray2RGB(spectrum), md)
+    data = proj.image.value
 
-    if spectrum is None:
+    md = data.metadata
+    spec = numpy.swapaxes(data, 0, 1)  # Make sure the order is T vs C
+    spec = model.DataArray(img.DataArray2RGB(data), md)
+
+    if spec is None:
         raise LookupError("No pixel selected to pick a spectrum")
-    spectrum_range, unit_wl = stream.get_spectrum_range()
-    time_range, unit_tl = stream.get_time_values()
+    spectrum_range, unit_wl = spectrum.get_spectrum_range(data)
+    time_range, unit_tl = spectrum.get_time_range(data)
 
     if raw:
-        data = spectrum.C  # switch axes
+        data = spec.C  # switch axes
         if unit_wl == "m":
             data.metadata[model.MD_WL_LIST] = spectrum_range
         if unit_tl == "s":
@@ -1505,7 +1515,7 @@ def temporal_spectrum_to_export_data(stream, raw):
         data.metadata[model.MD_ACQ_TYPE] = model.MD_AT_STREAK
         return data
     else:
-        images = set_images([(spectrum, (0, 0), (1, 1), True, None, None, None, None, "Spatial Spectrum", None, None, {})])
+        images = set_images([(spec, (0, 0), (1, 1), True, None, None, None, None, "Spatial Spectrum", None, None, {})])
         # TODO: just use a standard tuple, instead of wx.Size
         client_size = wx.Size(SPEC_PLOT_SIZE, SPEC_PLOT_SIZE)
         im = images[0]  # just one image
@@ -1566,7 +1576,7 @@ def temporal_spectrum_to_export_data(stream, raw):
         # Draw left vertical (time) legend
         orientation = wx.VERTICAL
         tick_spacing = SPEC_PLOT_SIZE // 6
-        line_length = spectrum.shape[0] * spectrum.metadata[model.MD_PIXEL_SIZE][1]
+        line_length = spec.shape[0] * spec.metadata[model.MD_PIXEL_SIZE][1]
         value_range = (0, line_length)
         scale_y_draw = numpy.empty((client_size.y, SPEC_SCALE_WIDTH, 4), dtype=numpy.uint8)
         scale_y_draw.fill(255)

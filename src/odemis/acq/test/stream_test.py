@@ -43,7 +43,7 @@ from odemis.acq.stream import POL_POSITIONS
 from numpy import int16
 from odemis.acq.stream._projection import RGBSpatialSpectrumProjection, \
     SinglePointSpectrumProjection, SinglePointChronoProjection, \
-    LineSpectrumProjection
+    LineSpectrumProjection, MeanSpectrumProjection
 
 logging.basicConfig(format="%(asctime)s  %(levelname)-7s %(module)-15s: %(message)s")
 logging.getLogger().setLevel(logging.DEBUG)
@@ -3388,7 +3388,7 @@ class StaticStreamsTestCase(unittest.TestCase):
 
     def test_temp_spec_calib(self):
         """Test StaticSpectrumStream calibration"""
-        spec = self._create_spec_data()
+        spec = self._create_temporal_spec_data()
         specs = stream.StaticSpectrumStream("test", spec)
         proj_spatial = RGBSpatialSpectrumProjection(specs)
         specs.spectrumBandwidth.value = (specs.spectrumBandwidth.range[0][0], specs.spectrumBandwidth.range[1][1])
@@ -3417,6 +3417,22 @@ class StaticStreamsTestCase(unittest.TestCase):
         # Check it's a RGB DataArray
         self.assertEqual(im2d.shape, spec.shape[-2:] + (3,))
         self.assertTrue(numpy.any(im2d != prev_im2d))
+
+    def test_mean_spec(self):
+        spec = self._create_spec_data()
+        specs = stream.StaticSpectrumStream("test", spec)
+        proj = MeanSpectrumProjection(specs)
+        time.sleep(2)
+        mean_spec = proj.image.value
+        self.assertEqual(mean_spec.shape, (spec.shape[0],))
+
+    def test_mean_temporal_spec(self):
+        temp_spec = self._create_temporal_spec_data()
+        temp_specs = stream.StaticSpectrumStream("test", temp_spec)
+        proj = MeanSpectrumProjection(temp_specs)
+        time.sleep(5)
+        mean_spec = proj.image.value
+        self.assertEqual(mean_spec.shape, (temp_spec.shape[0],))
 
     def test_tiled_stream(self):
         POS = (5.0, 7.0)
